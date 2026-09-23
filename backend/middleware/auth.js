@@ -2,18 +2,28 @@ import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'taskforge_secret_key_2026';
 
-export const protect = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Unauthorized. No token provided.' });
+const auth = (req, res, next) => {
+  const authHeader = req.header('Authorization');
+  if (!authHeader) {
+    return res.status(401).json({ message: 'No authentication token, access denied' });
   }
 
-  const token = authHeader.split(' ')[1];
+  const token = authHeader.startsWith('Bearer ')
+    ? authHeader.split(' ')[1]
+    : authHeader;
+
+  if (!token) {
+    return res.status(401).json({ message: 'Token format invalid, access denied' });
+  }
+
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = { id: decoded.id };
+    const verified = jwt.verify(token, JWT_SECRET);
+    // Verified object: { id: '...' }
+    req.user = verified;
     next();
-  } catch (error) {
-    return res.status(401).json({ message: 'Invalid or expired token.' });
+  } catch (err) {
+    res.status(401).json({ message: 'Token verification failed, authorization denied' });
   }
 };
+
+export default auth;
