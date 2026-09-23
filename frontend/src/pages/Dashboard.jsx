@@ -1,6 +1,10 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { Plus, Trash2, LogOut, CheckCircle2, Clock, CircleDot, GripVertical, LayoutGrid } from 'lucide-react';
+import { 
+  Plus, Trash2, LogOut, CheckCircle2, Clock, CircleDot, 
+  GripVertical, X, BarChart3, ShieldCheck, Search, Filter, 
+  Pencil, Save 
+} from 'lucide-react';
 
 const COLUMNS = [
   { 
@@ -39,6 +43,15 @@ export default function Dashboard() {
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState('medium');
   const [draggedTaskId, setDraggedTaskId] = useState(null);
+  
+  // Modals & Filters
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('all');
+
+  // Step 3: Edit Task State
+  const [editingTask, setEditingTask] = useState(null);
+  const [editForm, setEditForm] = useState({ title: '', description: '', priority: 'medium', status: 'todo' });
 
   const fetchTasks = async () => {
     try {
@@ -100,6 +113,40 @@ export default function Dashboard() {
     }
   };
 
+  // Step 3: Handle Edit Submission
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    if (!editForm.title.trim()) return;
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/tasks/${editingTask._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(editForm),
+      });
+
+      if (res.ok) {
+        setEditingTask(null);
+        fetchTasks();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const openEditModal = (task) => {
+    setEditingTask(task);
+    setEditForm({
+      title: task.title,
+      description: task.description || '',
+      priority: task.priority,
+      status: task.status,
+    });
+  };
+
   const deleteTask = async (taskId) => {
     setTasks((prev) => prev.filter((t) => t._id !== taskId));
     try {
@@ -131,36 +178,85 @@ export default function Dashboard() {
     }
   };
 
+  const getInitials = (name) => {
+    if (!name) return 'U';
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  const totalTasks = tasks.length;
+  const completedTasks = tasks.filter((t) => t.status === 'done').length;
+  const inProgressTasks = tasks.filter((t) => t.status === 'in-progress').length;
+  const todoTasks = tasks.filter((t) => t.status === 'todo').length;
+  const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((task) => {
+      const matchesSearch =
+        task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (task.description && task.description.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      const matchesPriority =
+        priorityFilter === 'all' || task.priority === priorityFilter;
+
+      return matchesSearch && matchesPriority;
+    });
+  }, [tasks, searchQuery, priorityFilter]);
+
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 p-6 md:p-10 font-sans">
-      {/* Top Navbar */}
+    <div className="min-h-screen bg-slate-100 text-slate-900 p-6 md:p-10 font-sans relative">
+      {/* Top Navbar Header */}
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-5 mb-7 gap-4 bg-white border border-slate-300 px-6 py-4 rounded-2xl shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-300">
-            <LayoutGrid size={20} />
-          </div>
+          <button
+            onClick={() => setShowProfileModal(true)}
+            title="Open Member Profile & Stats"
+            className="h-11 w-11 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm flex items-center justify-center shadow-md shadow-indigo-300 transition transform hover:scale-105 cursor-pointer ring-2 ring-indigo-400/40"
+          >
+            {getInitials(user?.name)}
+          </button>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-              TaskForge <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">Kanban</span>
-            </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Workspace: <span className="text-slate-800 font-semibold">{user?.name}</span> ({user?.email})
-            </p>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold tracking-tight text-slate-900">
+                TaskForge
+              </h1>
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+                Kanban
+              </span>
+            </div>
+            <button
+              onClick={() => setShowProfileModal(true)}
+              className="text-xs text-slate-500 hover:text-indigo-600 font-medium transition text-left cursor-pointer flex items-center gap-1 mt-0.5"
+            >
+              <span>Workspace:</span> <strong className="text-slate-800 underline decoration-slate-300">{user?.name}</strong>
+            </button>
           </div>
         </div>
 
-        <button
-          onClick={logout}
-          className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-xl hover:bg-rose-100 transition shadow-sm"
-        >
-          <LogOut size={14} /> Exit Board
-        </button>
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+          <div className="hidden lg:flex items-center gap-2 px-3.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+            <BarChart3 size={14} className="text-indigo-600" />
+            <span className="text-slate-600 font-medium">Completion Rate:</span>
+            <span className="font-bold text-slate-900">{completionPercentage}%</span>
+          </div>
+
+          <button
+            onClick={logout}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-xl hover:bg-rose-100 transition shadow-sm cursor-pointer"
+          >
+            <LogOut size={14} /> Exit Board
+          </button>
+        </div>
       </header>
 
-      {/* Creation Bar */}
+      {/* Task Creation Bar */}
       <form
         onSubmit={handleCreateTask}
-        className="grid grid-cols-1 md:grid-cols-12 gap-3 p-3.5 mb-8 bg-white border border-slate-300 rounded-2xl shadow-sm"
+        className="grid grid-cols-1 md:grid-cols-12 gap-3 p-3.5 mb-6 bg-white border border-slate-300 rounded-2xl shadow-sm"
       >
         <div className="md:col-span-5">
           <input
@@ -206,10 +302,60 @@ export default function Dashboard() {
         </div>
       </form>
 
-      {/* High Contrast Colorful Columns */}
+      {/* Search & Priority Filter Toolbar */}
+      <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3 mb-7 p-3 bg-white border border-slate-300 rounded-2xl shadow-sm">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search tasks by title or description..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50 text-slate-900 placeholder-slate-400 border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:bg-white transition"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 mr-1">
+            <Filter size={12} /> Filter:
+          </span>
+          {[
+            { id: 'all', label: 'All' },
+            { id: 'high', label: 'High' },
+            { id: 'medium', label: 'Medium' },
+            { id: 'low', label: 'Low' },
+          ].map((pill) => {
+            const isActive = priorityFilter === pill.id;
+            return (
+              <button
+                key={pill.id}
+                type="button"
+                onClick={() => setPriorityFilter(pill.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer border ${
+                  isActive
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-200'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                {pill.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Columns Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {COLUMNS.map((col) => {
-          const colTasks = tasks.filter((t) => t.status === col.key);
+          const colTasks = filteredTasks.filter((t) => t.status === col.key);
           const Icon = col.icon;
 
           return (
@@ -219,7 +365,6 @@ export default function Dashboard() {
               onDrop={(e) => handleDrop(e, col.key)}
               className={`${col.bg} border-2 ${col.border} rounded-2xl p-4 flex flex-col min-h-[580px] shadow-md transition-all`}
             >
-              {/* Header with Darker Colored Accent */}
               <div className="flex justify-between items-center pb-3.5 mb-4 border-b border-black/10">
                 <div className="flex items-center gap-2">
                   <div className={`p-1.5 rounded-lg ${col.headerBadge} shadow-sm`}>
@@ -234,12 +379,19 @@ export default function Dashboard() {
                 </span>
               </div>
 
-              {/* Cards Container */}
               <div className="flex flex-col gap-3 flex-1 overflow-y-auto pr-1">
                 {colTasks.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-44 border-2 border-dashed border-black/15 rounded-xl text-slate-500 text-xs gap-1 select-none font-medium">
-                    <span>No tasks in this lane</span>
-                    <span className="text-[11px] text-slate-400">Drag or drop cards here</span>
+                    <span>
+                      {searchQuery || priorityFilter !== 'all'
+                        ? 'No matching tasks'
+                        : 'No tasks in this lane'}
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      {searchQuery || priorityFilter !== 'all'
+                        ? 'Try adjusting your search filters'
+                        : 'Drag or drop cards here'}
+                    </span>
                   </div>
                 ) : (
                   colTasks.map((task) => (
@@ -247,7 +399,7 @@ export default function Dashboard() {
                       key={task._id}
                       draggable
                       onDragStart={(e) => handleDragStart(e, task._id)}
-                      className="group p-4 bg-white hover:bg-slate-50 rounded-xl border border-slate-300/90 hover:border-slate-400 transition-all duration-150 shadow-md cursor-grab active:cursor-grabbing"
+                      className="group p-4 bg-white hover:bg-slate-50 rounded-xl border border-slate-300/90 hover:border-slate-400 transition-all duration-150 shadow-sm hover:shadow-md cursor-grab active:cursor-grabbing"
                     >
                       <div className="flex justify-between items-start gap-2">
                         <div className="flex items-start gap-2">
@@ -259,13 +411,22 @@ export default function Dashboard() {
                             {task.title}
                           </h4>
                         </div>
-                        <button
-                          onClick={() => deleteTask(task._id)}
-                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-600 transition p-1"
-                          title="Delete Task"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                          <button
+                            onClick={() => openEditModal(task)}
+                            className="text-slate-400 hover:text-indigo-600 transition p-1 cursor-pointer"
+                            title="Edit Task"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            onClick={() => deleteTask(task._id)}
+                            className="text-slate-400 hover:text-rose-600 transition p-1 cursor-pointer"
+                            title="Delete Task"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </div>
 
                       {task.description && (
@@ -274,7 +435,6 @@ export default function Dashboard() {
                         </p>
                       )}
 
-                      {/* Card Meta & Actions */}
                       <div className="flex justify-between items-center mt-3 pt-3 border-t border-slate-100 pl-6">
                         <span
                           className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded border ${
@@ -306,6 +466,176 @@ export default function Dashboard() {
           );
         })}
       </div>
+
+      {/* STEP 3: TASK EDIT MODAL */}
+      {editingTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-lg bg-white border border-slate-300 rounded-3xl p-6 shadow-2xl relative">
+            <button
+              onClick={() => setEditingTask(null)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-700 transition p-1 rounded-lg cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="flex items-center gap-2.5 pb-4 mb-5 border-b border-slate-200">
+              <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
+                <Pencil size={18} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Edit Task</h3>
+                <p className="text-xs text-slate-500">Update task details and workflow properties</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Title
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.title}
+                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                  className="w-full px-4 py-2.5 text-sm bg-slate-50 text-slate-900 border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 focus:bg-white transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Description
+                </label>
+                <textarea
+                  rows={3}
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  placeholder="Task context or notes..."
+                  className="w-full px-4 py-2.5 text-sm bg-slate-50 text-slate-900 border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 focus:bg-white transition resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Priority
+                  </label>
+                  <select
+                    value={editForm.priority}
+                    onChange={(e) => setEditForm({ ...editForm, priority: e.target.value })}
+                    className="w-full px-3 py-2 text-sm bg-slate-50 text-slate-800 font-medium border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 cursor-pointer"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Status Lane
+                  </label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                    className="w-full px-3 py-2 text-sm bg-slate-50 text-slate-800 font-medium border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 cursor-pointer"
+                  >
+                    <option value="todo">To Do</option>
+                    <option value="in-progress">In Progress</option>
+                    <option value="done">Completed</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-slate-200 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEditingTask(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition shadow-md shadow-indigo-200 cursor-pointer"
+                >
+                  <Save size={14} /> Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* User Profile Modal */}
+      {showProfileModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-white border border-slate-300 rounded-3xl p-6 shadow-2xl relative">
+            <button
+              onClick={() => setShowProfileModal(false)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-700 transition p-1 rounded-lg cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="flex items-center gap-4 pb-5 border-b border-slate-200">
+              <div className="h-16 w-16 rounded-2xl bg-indigo-600 text-white font-black text-xl flex items-center justify-center shadow-lg shadow-indigo-200">
+                {getInitials(user?.name)}
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">{user?.name}</h3>
+                <p className="text-xs text-slate-500">{user?.email}</p>
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 mt-1.5">
+                  <ShieldCheck size={11} /> Verified Member
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
+                Workspace Productivity
+              </h4>
+
+              <div className="grid grid-cols-3 gap-2.5 mb-4">
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-center">
+                  <span className="block text-lg font-black text-amber-900">{todoTasks}</span>
+                  <span className="text-[10px] font-semibold text-amber-700 uppercase">To Do</span>
+                </div>
+                <div className="p-3 bg-sky-50 border border-sky-200 rounded-2xl text-center">
+                  <span className="block text-lg font-black text-sky-900">{inProgressTasks}</span>
+                  <span className="text-[10px] font-semibold text-sky-700 uppercase">Active</span>
+                </div>
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-center">
+                  <span className="block text-lg font-black text-emerald-900">{completedTasks}</span>
+                  <span className="text-[10px] font-semibold text-emerald-700 uppercase">Done</span>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+                <div className="flex justify-between items-center text-xs font-semibold mb-1.5">
+                  <span className="text-slate-600">Completion Ratio</span>
+                  <span className="text-indigo-600">{completionPercentage}%</span>
+                </div>
+                <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-indigo-600 rounded-full transition-all duration-500 ease-out"
+                    style={{ width: `${completionPercentage}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-slate-200 flex justify-end">
+              <button
+                onClick={() => setShowProfileModal(false)}
+                className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition shadow-md shadow-indigo-200 cursor-pointer"
+              >
+                Close Profile
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
