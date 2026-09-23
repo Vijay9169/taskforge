@@ -3,7 +3,8 @@ import { AuthContext } from '../context/AuthContext';
 import { 
   Plus, Trash2, LogOut, CheckCircle2, Clock, CircleDot, 
   GripVertical, X, ShieldCheck, Search, Filter, 
-  Pencil, Save, Calendar, Timer, CheckCircle, PlusCircle, RotateCcw
+  Pencil, Save, Calendar, Timer, CheckCircle, PlusCircle, 
+  RotateCcw, Download, AlertTriangle, CheckCheck
 } from 'lucide-react';
 
 const COLUMNS = [
@@ -70,27 +71,38 @@ function formatDateTime(dateString) {
   });
 }
 
+function formatToInputDateTime(dateString) {
+  if (!dateString) return '';
+  const d = new Date(dateString);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function Dashboard() {
   const { user, token, logout } = useContext(AuthContext);
   const [tasks, setTasks] = useState([]);
   const [draggedTaskId, setDraggedTaskId] = useState(null);
   const [activeDropColumn, setActiveDropColumn] = useState(null);
   
-  // Modals & Toolbar States
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('all');
 
-  // Create Task Form State
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newPriority, setNewPriority] = useState('medium');
   const [newStatus, setNewStatus] = useState('todo');
+  const [newDueDate, setNewDueDate] = useState('');
 
-  // Edit Task State
   const [editingTask, setEditingTask] = useState(null);
-  const [editForm, setEditForm] = useState({ title: '', description: '', priority: 'medium', status: 'todo' });
+  const [editForm, setEditForm] = useState({ 
+    title: '', 
+    description: '', 
+    priority: 'medium', 
+    status: 'todo',
+    dueDate: '' 
+  });
 
   const fetchTasks = async () => {
     try {
@@ -123,7 +135,8 @@ export default function Dashboard() {
           title: newTitle, 
           description: newDescription, 
           priority: newPriority, 
-          status: newStatus 
+          status: newStatus,
+          dueDate: newDueDate ? new Date(newDueDate).toISOString() : null,
         }),
       });
       if (res.ok) {
@@ -131,6 +144,7 @@ export default function Dashboard() {
         setNewDescription('');
         setNewPriority('medium');
         setNewStatus('todo');
+        setNewDueDate('');
         setShowCreateModal(false);
         fetchTasks();
       }
@@ -171,7 +185,10 @@ export default function Dashboard() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify({
+          ...editForm,
+          dueDate: editForm.dueDate ? new Date(editForm.dueDate).toISOString() : null,
+        }),
       });
 
       if (res.ok) {
@@ -190,6 +207,7 @@ export default function Dashboard() {
       description: task.description || '',
       priority: task.priority,
       status: task.status,
+      dueDate: task.dueDate ? formatToInputDateTime(task.dueDate) : '',
     });
   };
 
@@ -213,14 +231,10 @@ export default function Dashboard() {
 
   const handleDragOver = (e, columnKey) => {
     e.preventDefault();
-    if (activeDropColumn !== columnKey) {
-      setActiveDropColumn(columnKey);
-    }
+    if (activeDropColumn !== columnKey) setActiveDropColumn(columnKey);
   };
 
-  const handleDragLeave = () => {
-    setActiveDropColumn(null);
-  };
+  const handleDragLeave = () => setActiveDropColumn(null);
 
   const handleDrop = (e, columnStatus) => {
     e.preventDefault();
@@ -234,12 +248,7 @@ export default function Dashboard() {
 
   const getInitials = (name) => {
     if (!name) return 'U';
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
+    return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
   const resetFilters = () => {
@@ -247,7 +256,46 @@ export default function Dashboard() {
     setPriorityFilter('all');
   };
 
-  // Metrics
+  const exportToCSV = () => {
+    if (tasks.length === 0) return alert('No tasks to export');
+
+    const headers = ['Title', 'Description', 'Priority', 'Status', 'Due Date & Time', 'Created At', 'Completed At', 'Turnaround Duration'];
+
+    const formatSafeCSVField = (val) => {
+      if (!val) return '""';
+      return `"${String(val).replace(/"/g, '""').replace(/[\r\n]+/g, ' ')}"`;
+    };
+
+    const rows = tasks.map((t) => {
+      const compDate = t.completedAt || (t.status === 'done' ? t.updatedAt : null);
+      const duration = t.status === 'done' 
+        ? formatDuration(t.startedAt || t.createdAt, compDate) 
+        : (t.status === 'in-progress' ? `Running (${formatDuration(t.startedAt)})` : 'In Queue');
+
+      return [
+        formatSafeCSVField(t.title),
+        formatSafeCSVField(t.description),
+        formatSafeCSVField(t.priority),
+        formatSafeCSVField(t.status),
+        formatSafeCSVField(t.dueDate ? formatDateTime(t.dueDate) : 'N/A'),
+        formatSafeCSVField(formatDateTime(t.createdAt)),
+        formatSafeCSVField(compDate ? formatDateTime(compDate) : 'N/A'),
+        formatSafeCSVField(duration),
+      ].join(',');
+    });
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `TaskForge_Report_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const totalTasks = tasks.length;
   const completedTasks = tasks.filter((t) => t.status === 'done').length;
   const inProgressTasks = tasks.filter((t) => t.status === 'in-progress').length;
@@ -269,7 +317,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 p-6 md:p-10 font-sans relative">
-      {/* Top Navbar Header */}
+      {/* Header */}
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-5 mb-6 gap-4 bg-white border border-slate-300 px-6 py-4 rounded-2xl shadow-sm">
         <div className="flex items-center gap-3">
           <button
@@ -281,12 +329,8 @@ export default function Dashboard() {
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight text-slate-900">
-                TaskForge
-              </h1>
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
-                Kanban
-              </span>
+              <h1 className="text-xl font-bold tracking-tight text-slate-900">TaskForge</h1>
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">Kanban</span>
             </div>
             <button
               onClick={() => setShowProfileModal(true)}
@@ -297,24 +341,32 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end flex-wrap">
+          <button
+            onClick={exportToCSV}
+            title="Export spreadsheet report"
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-300 rounded-xl hover:bg-slate-100 transition shadow-sm cursor-pointer"
+          >
+            <Download size={14} /> Export CSV
+          </button>
+
           <button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition shadow-md shadow-indigo-200 active:scale-95 cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition shadow-md shadow-indigo-200 active:scale-95 cursor-pointer"
           >
             <Plus size={16} /> Create Task
           </button>
 
           <button
             onClick={logout}
-            className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-xl hover:bg-rose-100 transition shadow-sm cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-xl hover:bg-rose-100 transition shadow-sm cursor-pointer"
           >
             <LogOut size={14} /> Exit Board
           </button>
         </div>
       </header>
 
-      {/* WORKSPACE ANALYTICS STRIP */}
+      {/* Analytics Strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-6">
         <div className="p-4 bg-white border border-slate-300 rounded-2xl shadow-sm">
           <span className="text-xs font-semibold text-slate-500 block">Total Pipeline</span>
@@ -358,7 +410,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Search & Priority Filter Toolbar */}
+      {/* Search & Filters */}
       <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3 mb-7 p-3 bg-white border border-slate-300 rounded-2xl shadow-sm">
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -408,7 +460,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Columns Grid with Live Drag Hover Physics */}
+      {/* Columns */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {COLUMNS.map((col) => {
           const colTasks = filteredTasks.filter((t) => t.status === col.key);
@@ -428,9 +480,7 @@ export default function Dashboard() {
                   <div className={`p-1.5 rounded-lg ${col.headerBadge} shadow-sm`}>
                     <Icon size={16} />
                   </div>
-                  <span className="font-bold text-sm text-slate-900 tracking-wide">
-                    {col.label}
-                  </span>
+                  <span className="font-bold text-sm text-slate-900 tracking-wide">{col.label}</span>
                 </div>
                 <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${col.countBadge}`}>
                   {colTasks.length}
@@ -453,14 +503,13 @@ export default function Dashboard() {
                         <RotateCcw size={12} /> Clear Filter
                       </button>
                     ) : (
-                      <span className="text-[11px] text-slate-400">
-                        Drag or drop cards here
-                      </span>
+                      <span className="text-[11px] text-slate-400">Drag or drop cards here</span>
                     )}
                   </div>
                 ) : (
                   colTasks.map((task) => {
                     const completionDate = task.completedAt || (task.status === 'done' ? task.updatedAt : null);
+                    const isOverdue = task.dueDate && task.status !== 'done' && new Date(task.dueDate) < new Date();
 
                     return (
                       <div
@@ -471,13 +520,8 @@ export default function Dashboard() {
                       >
                         <div className="flex justify-between items-start gap-2">
                           <div className="flex items-start gap-2">
-                            <GripVertical
-                              size={15}
-                              className="text-slate-400 group-hover:text-slate-600 mt-0.5 flex-shrink-0"
-                            />
-                            <h4 className="font-bold text-slate-900 text-sm leading-snug">
-                              {task.title}
-                            </h4>
+                            <GripVertical size={15} className="text-slate-400 group-hover:text-slate-600 mt-0.5 flex-shrink-0" />
+                            <h4 className="font-bold text-slate-900 text-sm leading-snug">{task.title}</h4>
                           </div>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
                             <button
@@ -503,30 +547,52 @@ export default function Dashboard() {
                           </p>
                         )}
 
-                        {/* Lifecycle Metrics */}
-                        <div className="mt-3 pl-6 flex flex-wrap items-center gap-2 text-[10px] text-slate-500 font-medium">
-                          <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                            <Calendar size={10} className="text-slate-400" />
+                        {/* DISTINCT COLOR CODED LIFECYCLE BADGES */}
+                        <div className="mt-3 pl-6 flex flex-wrap items-center gap-2 text-[10px] font-semibold">
+                          
+                          {/* 1. CREATED BADGE: Slate / Grey Neutral */}
+                          <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-300 shadow-2xs">
+                            <Calendar size={10} className="text-slate-500" />
                             Created: {formatDateTime(task.createdAt)}
                           </span>
 
+                          {/* 2. DUE DATE BADGE: Violet Purple (Normal) / Soft Red (Overdue) */}
+                          {task.dueDate && (
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border shadow-2xs ${
+                              isOverdue 
+                                ? 'bg-rose-50 text-rose-700 border-rose-300 font-bold animate-pulse'
+                                : 'bg-violet-50 text-violet-700 border-violet-200'
+                            }`}>
+                              {isOverdue ? (
+                                <AlertTriangle size={10} className="text-rose-600" />
+                              ) : (
+                                <Clock size={10} className="text-violet-500" />
+                              )}
+                              Due: {formatDateTime(task.dueDate)}
+                              {isOverdue && ' (Overdue)'}
+                            </span>
+                          )}
+
+                          {/* IN PROGRESS TIMER: Sky Blue */}
                           {task.status === 'in-progress' && task.startedAt && (
-                            <span className="inline-flex items-center gap-1 bg-sky-50 text-sky-700 px-2 py-0.5 rounded-md border border-sky-200 font-semibold animate-pulse">
-                              <Timer size={10} />
+                            <span className="inline-flex items-center gap-1 bg-sky-50 text-sky-700 px-2 py-0.5 rounded-md border border-sky-300 font-bold animate-pulse shadow-2xs">
+                              <Timer size={10} className="text-sky-600" />
                               In Progress: {formatDuration(task.startedAt)}
                             </span>
                           )}
 
+                          {/* 3. COMPLETED AT BADGE: Forest Emerald */}
                           {task.status === 'done' && completionDate && (
-                            <span className="inline-flex items-center gap-1 bg-emerald-50/70 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-200 font-medium">
+                            <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-300 shadow-2xs">
                               <CheckCircle size={10} className="text-emerald-600" />
                               Completed: {formatDateTime(completionDate)}
                             </span>
                           )}
 
+                          {/* 4. DONE IN TURNAROUND DURATION: Teal Highlight */}
                           {task.status === 'done' && (
-                            <span className="inline-flex items-center gap-1 bg-emerald-100/80 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-300 font-bold">
-                              <CheckCircle2 size={10} className="text-emerald-700" />
+                            <span className="inline-flex items-center gap-1 bg-teal-100 text-teal-900 px-2.5 py-0.5 rounded-md border border-teal-400 font-black shadow-2xs">
+                              <CheckCheck size={11} className="text-teal-700" />
                               Done in: {formatDuration(task.startedAt || task.createdAt, completionDate)}
                             </span>
                           )}
@@ -583,67 +649,69 @@ export default function Dashboard() {
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900">Create New Task</h3>
-                <p className="text-xs text-slate-500">Add a work item to your Kanban board</p>
+                <p className="text-xs text-slate-500">Set target timeline and priority</p>
               </div>
             </div>
 
             <form onSubmit={handleCreateTask} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Task Title *
-                </label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Task Title *</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Build API integration..."
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full px-4 py-2.5 text-sm bg-slate-50 text-slate-900 border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition"
+                  className="w-full px-4 py-2.5 text-sm bg-slate-50 text-slate-900 border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 focus:bg-white transition"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Description / Context
-                </label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Description</label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   placeholder="Add details, steps, or requirements..."
                   value={newDescription}
                   onChange={(e) => setNewDescription(e.target.value)}
-                  className="w-full px-4 py-2.5 text-sm bg-slate-50 text-slate-900 border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition resize-none"
+                  className="w-full px-4 py-2.5 text-sm bg-slate-50 text-slate-900 border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 focus:bg-white transition resize-none"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-2.5">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Priority Level
-                  </label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Priority</label>
                   <select
                     value={newPriority}
                     onChange={(e) => setNewPriority(e.target.value)}
-                    className="w-full px-3 py-2 text-sm bg-slate-50 text-slate-800 font-medium border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 cursor-pointer"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 text-slate-800 font-medium border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 cursor-pointer"
                   >
-                    <option value="low">Low Priority</option>
-                    <option value="medium">Medium Priority</option>
-                    <option value="high">High Priority</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Initial Lane
-                  </label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Lane</label>
                   <select
                     value={newStatus}
                     onChange={(e) => setNewStatus(e.target.value)}
-                    className="w-full px-3 py-2 text-sm bg-slate-50 text-slate-800 font-medium border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 cursor-pointer"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 text-slate-800 font-medium border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 cursor-pointer"
                   >
                     <option value="todo">To Do</option>
                     <option value="in-progress">In Progress</option>
                     <option value="done">Completed</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Due Date & Time</label>
+                  <input
+                    type="datetime-local"
+                    value={newDueDate}
+                    onChange={(e) => setNewDueDate(e.target.value)}
+                    className="w-full px-2 py-2 text-xs bg-slate-50 text-slate-800 font-medium border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 cursor-pointer"
+                  />
                 </div>
               </div>
 
@@ -667,7 +735,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Task Edit Modal */}
+      {/* EDIT MODAL */}
       {editingTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="w-full max-w-lg bg-white border border-slate-300 rounded-3xl p-6 shadow-2xl relative">
@@ -684,15 +752,13 @@ export default function Dashboard() {
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900">Edit Task</h3>
-                <p className="text-xs text-slate-500">Update task details and workflow properties</p>
+                <p className="text-xs text-slate-500">Update target time and details</p>
               </div>
             </div>
 
             <form onSubmit={handleEditSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Title
-                </label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Title</label>
                 <input
                   type="text"
                   required
@@ -703,11 +769,9 @@ export default function Dashboard() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Description
-                </label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Description</label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={editForm.description}
                   onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                   placeholder="Task context or notes..."
@@ -715,15 +779,13 @@ export default function Dashboard() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-2.5">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Priority
-                  </label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Priority</label>
                   <select
                     value={editForm.priority}
                     onChange={(e) => setEditForm({ ...editForm, priority: e.target.value })}
-                    className="w-full px-3 py-2 text-sm bg-slate-50 text-slate-800 font-medium border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 cursor-pointer"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 text-slate-800 font-medium border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 cursor-pointer"
                   >
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -732,18 +794,26 @@ export default function Dashboard() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Status Lane
-                  </label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Lane</label>
                   <select
                     value={editForm.status}
                     onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-                    className="w-full px-3 py-2 text-sm bg-slate-50 text-slate-800 font-medium border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 cursor-pointer"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 text-slate-800 font-medium border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 cursor-pointer"
                   >
                     <option value="todo">To Do</option>
                     <option value="in-progress">In Progress</option>
                     <option value="done">Completed</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Due Date & Time</label>
+                  <input
+                    type="datetime-local"
+                    value={editForm.dueDate}
+                    onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })}
+                    className="w-full px-2 py-2 text-xs bg-slate-50 text-slate-800 font-medium border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 cursor-pointer"
+                  />
                 </div>
               </div>
 
@@ -792,10 +862,7 @@ export default function Dashboard() {
             </div>
 
             <div className="mt-5">
-              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
-                Workspace Productivity
-              </h4>
-
+              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">Workspace Productivity</h4>
               <div className="grid grid-cols-3 gap-2.5 mb-4">
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-center">
                   <span className="block text-lg font-black text-amber-900">{todoTasks}</span>

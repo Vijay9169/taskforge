@@ -4,7 +4,7 @@ import auth from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Get all tasks for logged in user
+// Get all tasks
 router.get('/', auth, async (req, res) => {
   try {
     const tasks = await Task.find({ user: req.user.id }).sort({ createdAt: -1 });
@@ -17,12 +17,13 @@ router.get('/', auth, async (req, res) => {
 // Create Task
 router.post('/', auth, async (req, res) => {
   try {
-    const { title, description, priority, status } = req.body;
+    const { title, description, priority, status, dueDate } = req.body;
     const task = new Task({
       title,
       description,
       priority,
       status: status || 'todo',
+      dueDate: dueDate || null,
       user: req.user.id,
     });
     await task.save();
@@ -32,7 +33,7 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
-// Update Task (With Timestamps)
+// Update Task
 router.put('/:id', auth, async (req, res) => {
   try {
     const task = await Task.findOne({ _id: req.params.id, user: req.user.id });
