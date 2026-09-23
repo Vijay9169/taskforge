@@ -1,29 +1,25 @@
 import React, { useState, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { ShieldCheck, LogIn, UserPlus } from 'lucide-react';
+import { LayoutGrid, LogIn, UserPlus, AlertCircle, ArrowRight } from 'lucide-react';
 
 export default function Auth() {
+  const { login, register } = useContext(AuthContext);
   const [isLogin, setIsLogin] = useState(true);
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [formData, setFormData] = useState({ name: '', email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useContext(AuthContext);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
-    const payload = isLogin ? { email, password } : { name, email, password };
-
     try {
+      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
       const res = await fetch(`http://localhost:5000${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(formData),
       });
 
       const data = await res.json();
@@ -31,7 +27,11 @@ export default function Auth() {
         throw new Error(data.message || 'Authentication failed');
       }
 
-      login(data.user, data.token);
+      if (isLogin) {
+        login(data.token, data.user);
+      } else {
+        register(data.token, data.user);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -40,82 +40,120 @@ export default function Auth() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen px-4 bg-slate-950">
-      <div className="w-full max-w-md p-8 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl">
-        <div className="flex justify-center mb-4 text-cyan-400">
-          <ShieldCheck size={42} />
+    <div className="min-h-screen bg-slate-100 flex flex-col justify-center items-center p-4 font-sans text-slate-900">
+      {/* Brand Header */}
+      <div className="flex items-center gap-3 mb-6">
+        <div className="h-11 w-11 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-300">
+          <LayoutGrid size={22} />
         </div>
-        <h2 className="text-2xl font-bold text-center text-slate-100 mb-2">
-          {isLogin ? 'Welcome Back to TaskForge' : 'Join TaskForge Platform'}
-        </h2>
-        <p className="text-sm text-center text-slate-400 mb-6">
-          {isLogin ? 'Sign in to access your boards' : 'Create an account to manage your agile workflows'}
-        </p>
+        <div>
+          <h1 className="text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2">
+            TaskForge <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">Kanban</span>
+          </h1>
+          <p className="text-xs text-slate-500 font-medium">Agile Project & Task Management</p>
+        </div>
+      </div>
+
+      {/* Main Auth Card */}
+      <div className="w-full max-w-md bg-white border border-slate-300 rounded-3xl p-8 shadow-xl shadow-slate-200/80">
+        <div className="mb-6 text-center">
+          <h2 className="text-xl font-bold text-slate-900">
+            {isLogin ? 'Welcome Back' : 'Create an Account'}
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">
+            {isLogin
+              ? 'Enter your credentials to access your workspace'
+              : 'Sign up to start organizing tasks across your boards'}
+          </p>
+        </div>
 
         {error && (
-          <div className="p-3 mb-4 text-sm text-red-300 bg-red-950/60 border border-red-800 rounded-lg">
-            {error}
+          <div className="mb-5 flex items-center gap-2.5 p-3 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-xl">
+            <AlertCircle size={16} className="flex-shrink-0" />
+            <span>{error}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {!isLogin && (
             <div>
-              <label className="block text-xs font-semibold uppercase text-slate-400 mb-1">Full Name</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Full Name
+              </label>
               <input
                 type="text"
                 required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 text-sm text-slate-100 bg-slate-950 border border-slate-700 rounded-lg focus:outline-none focus:border-cyan-400"
-                placeholder="Tony Stark"
+                placeholder="e.g. Vijay Pandey"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full px-4 py-2.5 text-sm bg-slate-50 text-slate-900 placeholder-slate-400 border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition"
               />
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-semibold uppercase text-slate-400 mb-1">Email Address</label>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              Email Address
+            </label>
             <input
               type="email"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 text-sm text-slate-100 bg-slate-950 border border-slate-700 rounded-lg focus:outline-none focus:border-cyan-400"
-              placeholder="developer@company.com"
+              placeholder="e.g. vijay@dev.com"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="w-full px-4 py-2.5 text-sm bg-slate-50 text-slate-900 placeholder-slate-400 border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase text-slate-400 mb-1">Password</label>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              Password
+            </label>
             <input
               type="password"
               required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 text-sm text-slate-100 bg-slate-950 border border-slate-700 rounded-lg focus:outline-none focus:border-cyan-400"
               placeholder="••••••••"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              className="w-full px-4 py-2.5 text-sm bg-slate-50 text-slate-900 placeholder-slate-400 border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2 py-2.5 mt-2 text-sm font-semibold text-white bg-cyan-600 rounded-lg hover:bg-cyan-500 transition-colors disabled:opacity-50"
+            className="w-full mt-2 flex items-center justify-center gap-2 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white rounded-xl font-bold text-sm transition shadow-md shadow-indigo-200 disabled:opacity-50 cursor-pointer"
           >
-            {isLogin ? <LogIn size={18} /> : <UserPlus size={18} />}
-            {loading ? 'Processing...' : isLogin ? 'Sign In' : 'Create Account'}
+            {loading ? (
+              'Processing...'
+            ) : isLogin ? (
+              <>
+                <LogIn size={16} /> Sign In
+              </>
+            ) : (
+              <>
+                <UserPlus size={16} /> Create Account
+              </>
+            )}
           </button>
         </form>
 
-        <p className="mt-6 text-xs text-center text-slate-400">
-          {isLogin ? "Don't have an account yet? " : 'Already registered? '}
-          <button
-            onClick={() => setIsLogin(!isLogin)}
-            className="text-cyan-400 hover:underline font-medium"
-          >
-            {isLogin ? 'Sign Up' : 'Log In'}
-          </button>
-        </p>
+        {/* Switch Login / Register */}
+        <div className="mt-6 pt-5 border-t border-slate-200 text-center">
+          <p className="text-xs text-slate-500">
+            {isLogin ? "Don't have an account yet?" : 'Already have an account?'}{' '}
+            <button
+              type="button"
+              onClick={() => {
+                setIsLogin(!isLogin);
+                setError('');
+              }}
+              className="font-bold text-indigo-600 hover:text-indigo-700 hover:underline inline-flex items-center gap-1 ml-1 cursor-pointer"
+            >
+              {isLogin ? 'Sign Up' : 'Sign In'} <ArrowRight size={12} />
+            </button>
+          </p>
+        </div>
       </div>
     </div>
   );

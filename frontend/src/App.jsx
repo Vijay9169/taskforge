@@ -1,17 +1,22 @@
 import React, { useContext } from 'react';
-import { AuthContext, AuthProvider } from './context/AuthContext';
+import { AuthProvider, AuthContext } from './context/AuthContext';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 
-function MainRouter() {
-  const { token } = useContext(AuthContext);
-  return token ? <Dashboard /> : <Auth />;
+function AppContent() {
+  const { token, user } = useContext(AuthContext);
+
+  if (!token || !user) {
+    return <Auth />;
+  }
+
+  return <Dashboard />;
 }
 
 export default function App() {
   return (
     <AuthProvider>
-      <MainRouter />
+      <AppContent />
     </AuthProvider>
   );
 }
