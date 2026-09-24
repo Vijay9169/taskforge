@@ -84,17 +84,27 @@ export default function Dashboard() {
   const [draggedTaskId, setDraggedTaskId] = useState(null);
   const [activeDropColumn, setActiveDropColumn] = useState(null);
   
+  // Modals & Toolbar States
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('all');
 
+  // Success Toast Notification State
+  const [toastMessage, setToastMessage] = useState('');
+
+  // Delete Confirmation Modals State
+  const [taskToDelete, setTaskToDelete] = useState(null);
+  const [showCancelledModal, setShowCancelledModal] = useState(false);
+
+  // Create Task Form State
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newPriority, setNewPriority] = useState('medium');
   const [newStatus, setNewStatus] = useState('todo');
   const [newDueDate, setNewDueDate] = useState('');
 
+  // Edit Task State
   const [editingTask, setEditingTask] = useState(null);
   const [editForm, setEditForm] = useState({ 
     title: '', 
@@ -103,6 +113,13 @@ export default function Dashboard() {
     status: 'todo',
     dueDate: '' 
   });
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage('');
+    }, 3500);
+  };
 
   const fetchTasks = async () => {
     try {
@@ -120,6 +137,7 @@ export default function Dashboard() {
     if (token) fetchTasks();
   }, [token]);
 
+  // Create Task Handler
   const handleCreateTask = async (e) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
@@ -147,6 +165,7 @@ export default function Dashboard() {
         setNewDueDate('');
         setShowCreateModal(false);
         fetchTasks();
+        showToast('Task created successfully!');
       }
     } catch (err) {
       console.error(err);
@@ -194,6 +213,7 @@ export default function Dashboard() {
       if (res.ok) {
         setEditingTask(null);
         fetchTasks();
+        showToast('Task updated successfully!');
       }
     } catch (err) {
       console.error(err);
@@ -211,13 +231,27 @@ export default function Dashboard() {
     });
   };
 
-  const deleteTask = async (taskId) => {
-    setTasks((prev) => prev.filter((t) => t._id !== taskId));
+  // User clicked "No, keep it"
+  const handleCancelDelete = () => {
+    setTaskToDelete(null);
+    setShowCancelledModal(true);
+  };
+
+  // User clicked "Yes, proceed!"
+  const confirmDeleteTask = async () => {
+    if (!taskToDelete) return;
+    const id = taskToDelete._id;
+    setTaskToDelete(null);
+
+    setTasks((prev) => prev.filter((t) => t._id !== id));
     try {
-      await fetch(`http://localhost:5000/api/tasks/${taskId}`, {
+      const res = await fetch(`http://localhost:5000/api/tasks/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (res.ok) {
+        showToast('Task deleted successfully!');
+      }
     } catch (err) {
       console.error(err);
       fetchTasks();
@@ -317,7 +351,24 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 p-6 md:p-10 font-sans relative">
-      {/* Header */}
+      
+      {/* SUCCESS TOAST NOTIFICATION */}
+      {toastMessage && (
+        <div className="fixed top-6 right-6 z-50 flex items-center gap-3 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl shadow-emerald-600/30 transition-all duration-300 animate-in fade-in slide-in-from-top-4">
+          <div className="bg-white/20 p-1 rounded-full">
+            <CheckCircle size={18} className="text-white" />
+          </div>
+          <span className="text-sm font-bold tracking-wide">{toastMessage}</span>
+          <button 
+            onClick={() => setToastMessage('')} 
+            className="ml-2 hover:opacity-80 transition cursor-pointer"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
+      {/* Top Navbar Header */}
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-5 mb-6 gap-4 bg-white border border-slate-300 px-6 py-4 rounded-2xl shadow-sm">
         <div className="flex items-center gap-3">
           <button
@@ -532,7 +583,7 @@ export default function Dashboard() {
                               <Pencil size={13} />
                             </button>
                             <button
-                              onClick={() => deleteTask(task._id)}
+                              onClick={() => setTaskToDelete(task)}
                               className="text-slate-400 hover:text-rose-600 transition p-1 cursor-pointer"
                               title="Delete Task"
                             >
@@ -550,13 +601,13 @@ export default function Dashboard() {
                         {/* DISTINCT COLOR CODED LIFECYCLE BADGES */}
                         <div className="mt-3 pl-6 flex flex-wrap items-center gap-2 text-[10px] font-semibold">
                           
-                          {/* 1. CREATED BADGE: Slate / Grey Neutral */}
+                          {/* 1. CREATED BADGE */}
                           <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-300 shadow-2xs">
                             <Calendar size={10} className="text-slate-500" />
                             Created: {formatDateTime(task.createdAt)}
                           </span>
 
-                          {/* 2. DUE DATE BADGE: Violet Purple (Normal) / Soft Red (Overdue) */}
+                          {/* 2. DUE DATE BADGE */}
                           {task.dueDate && (
                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border shadow-2xs ${
                               isOverdue 
@@ -573,7 +624,7 @@ export default function Dashboard() {
                             </span>
                           )}
 
-                          {/* IN PROGRESS TIMER: Sky Blue */}
+                          {/* IN PROGRESS TIMER */}
                           {task.status === 'in-progress' && task.startedAt && (
                             <span className="inline-flex items-center gap-1 bg-sky-50 text-sky-700 px-2 py-0.5 rounded-md border border-sky-300 font-bold animate-pulse shadow-2xs">
                               <Timer size={10} className="text-sky-600" />
@@ -581,7 +632,7 @@ export default function Dashboard() {
                             </span>
                           )}
 
-                          {/* 3. COMPLETED AT BADGE: Forest Emerald */}
+                          {/* 3. COMPLETED AT BADGE */}
                           {task.status === 'done' && completionDate && (
                             <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-300 shadow-2xs">
                               <CheckCircle size={10} className="text-emerald-600" />
@@ -589,7 +640,7 @@ export default function Dashboard() {
                             </span>
                           )}
 
-                          {/* 4. DONE IN TURNAROUND DURATION: Teal Highlight */}
+                          {/* 4. DONE IN TURNAROUND DURATION */}
                           {task.status === 'done' && (
                             <span className="inline-flex items-center gap-1 bg-teal-100 text-teal-900 px-2.5 py-0.5 rounded-md border border-teal-400 font-black shadow-2xs">
                               <CheckCheck size={11} className="text-teal-700" />
@@ -598,7 +649,7 @@ export default function Dashboard() {
                           )}
                         </div>
 
-                        {/* Card Bottom: Priority & Status Selector */}
+                        {/* Card Bottom */}
                         <div className="flex justify-between items-center mt-3 pt-3 border-t border-slate-100 pl-6">
                           <span
                             className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded border ${
@@ -631,6 +682,74 @@ export default function Dashboard() {
           );
         })}
       </div>
+
+      {/* STEP 1: ARE YOU SURE? DELETE CONFIRMATION MODAL */}
+      {taskToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-7 shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
+            {/* Warning Circle Icon */}
+            <div className="w-20 h-20 rounded-full border-4 border-amber-300/80 bg-amber-50/50 flex items-center justify-center mb-5">
+              <span className="text-amber-500 font-bold text-4xl select-none leading-none">!</span>
+            </div>
+
+            <h3 className="text-2xl font-bold text-slate-800 mb-2">
+              Are you sure?
+            </h3>
+
+            <p className="text-sm text-slate-500 leading-relaxed mb-6">
+              Are you sure you want to delete <strong className="text-slate-700 font-semibold">"{taskToDelete.title}"</strong>? This action cannot be undone.
+            </p>
+
+            <div className="flex items-center justify-center gap-3 w-full">
+              <button
+                type="button"
+                onClick={confirmDeleteTask}
+                className="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 active:scale-95 transition shadow-md shadow-rose-200 cursor-pointer"
+              >
+                Yes, proceed!
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelDelete}
+                className="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold text-white bg-sky-600 hover:bg-sky-700 active:scale-95 transition shadow-md shadow-sky-200 cursor-pointer"
+              >
+                No, keep it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 2: CANCELLED - YOUR RECORDS ARE SAFE MODAL */}
+      {showCancelledModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="w-full max-w-xs bg-white rounded-3xl p-7 shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
+            {/* Red Circle with Cross Icon */}
+            <div className="w-18 h-18 rounded-full border-4 border-rose-300 bg-rose-50/40 flex items-center justify-center mb-4">
+              <X size={36} className="text-rose-500 stroke-[2.5]" />
+            </div>
+
+            {/* Title */}
+            <h3 className="text-2xl font-bold text-slate-800 mb-2">
+              Cancelled
+            </h3>
+
+            {/* Subtitle */}
+            <p className="text-sm text-slate-500 mb-6">
+              Your records are safe :)
+            </p>
+
+            {/* OK Button */}
+            <button
+              type="button"
+              onClick={() => setShowCancelledModal(false)}
+              className="w-24 py-2 px-4 rounded-xl text-sm font-bold text-white bg-sky-600 hover:bg-sky-700 active:scale-95 transition shadow-md shadow-sky-200 cursor-pointer"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* CREATE TASK MODAL */}
       {showCreateModal && (
