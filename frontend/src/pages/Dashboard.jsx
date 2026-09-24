@@ -7,6 +7,8 @@ import {
   RotateCcw, Download, AlertTriangle, CheckCheck
 } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 const COLUMNS = [
   { 
     key: 'todo', 
@@ -123,7 +125,7 @@ export default function Dashboard() {
 
   const fetchTasks = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/tasks', {
+      const res = await fetch(`${API_BASE}/api/tasks`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -143,7 +145,7 @@ export default function Dashboard() {
     if (!newTitle.trim()) return;
 
     try {
-      const res = await fetch('http://localhost:5000/api/tasks', {
+      const res = await fetch(`${API_BASE}/api/tasks`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -172,13 +174,14 @@ export default function Dashboard() {
     }
   };
 
+  // Update Status
   const updateStatus = async (taskId, newStatusValue) => {
     setTasks((prev) =>
       prev.map((t) => (t._id === taskId ? { ...t, status: newStatusValue } : t))
     );
 
     try {
-      await fetch(`http://localhost:5000/api/tasks/${taskId}`, {
+      await fetch(`${API_BASE}/api/tasks/${taskId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -193,12 +196,13 @@ export default function Dashboard() {
     }
   };
 
+  // Edit Task
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     if (!editForm.title.trim()) return;
 
     try {
-      const res = await fetch(`http://localhost:5000/api/tasks/${editingTask._id}`, {
+      const res = await fetch(`${API_BASE}/api/tasks/${editingTask._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -237,7 +241,7 @@ export default function Dashboard() {
     setShowCancelledModal(true);
   };
 
-  // User clicked "Yes, proceed!"
+  // Delete Task
   const confirmDeleteTask = async () => {
     if (!taskToDelete) return;
     const id = taskToDelete._id;
@@ -245,7 +249,7 @@ export default function Dashboard() {
 
     setTasks((prev) => prev.filter((t) => t._id !== id));
     try {
-      const res = await fetch(`http://localhost:5000/api/tasks/${id}`, {
+      const res = await fetch(`${API_BASE}/api/tasks/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -290,6 +294,7 @@ export default function Dashboard() {
     setPriorityFilter('all');
   };
 
+  // Export CSV
   const exportToCSV = () => {
     if (tasks.length === 0) return alert('No tasks to export');
 
